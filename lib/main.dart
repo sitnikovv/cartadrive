@@ -1,14 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
-import 'firebase_options.dart';
 import 'logic/cartabloc.dart';
 import 'logic/cartaauth.dart';
 import 'logic/github.dart';
@@ -36,28 +30,14 @@ void main() async {
   isScreenWide = initialWindowWidth > 600;
   // logDebug('size: ${size.width}, ${size.height}');
 
-  // firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  // use emulator during debug
-  if (useEmulator && kDebugMode) {
-    try {
-      FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
-      FirebaseFunctions.instance.useFunctionsEmulator('localhost', 5001);
-      await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
-    } catch (e) {
-      debugPrint(e.toString());
-    }
-  }
-
   // audio handler
   final CartaAudioHandler handler = await createAudioHandler();
 
   // application documents directory
   final appDocDir = await getApplicationDocumentsDirectory();
   appDocDirPath = appDocDir.path;
+
+  final auth = await CartaAuth.create();
 
   // start app
   runApp(
@@ -66,12 +46,11 @@ void main() async {
         ChangeNotifierProvider<ScreenConfig>(
             create: (context) => ScreenConfig()),
         ChangeNotifierProvider<CartaRepo>(create: (_) => CartaRepo()),
-        ChangeNotifierProvider<CartaAuth>(create: (_) => CartaAuth()),
+        ChangeNotifierProvider<CartaAuth>(create: (_) => auth),
         ChangeNotifierProxyProvider<CartaAuth, CartaBloc>(
           create: (_) => CartaBloc(handler),
-          update: (_, auth, bloc) => bloc!..setUid(auth.uid),
+          update: (_, auth, bloc) => bloc!..setAccount(auth),
         ),
-	
       ],
       child: const MyApp(),
     ),

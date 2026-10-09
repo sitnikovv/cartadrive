@@ -1,5 +1,5 @@
 name: cartadrive
-description: An audiobook player based on Carta Plus.
+description: An audiobook player with a Google Drive bookshelf.
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -50,12 +50,9 @@ dependencies:
   path: ^1.8.3
   crypto: ^3.0.3
   mime: ^1.0.4
-  encrypt: ^5.0.1
-  firebase_core: ^3.1.0
-  firebase_auth: ^5.1.0
-  cloud_firestore: ^5.0.1
-  cloud_functions: ^5.0.1
+  flutter_secure_storage: ^9.2.4
   google_sign_in: ^6.1.4
+  google_sign_in_platform_interface: ^2.4.5
   dynamic_color: ^1.6.5
   audio_service: ^0.18.12
   shared_preferences: ^2.2.2
@@ -64,6 +61,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_secure_storage_platform_interface: ^1.1.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

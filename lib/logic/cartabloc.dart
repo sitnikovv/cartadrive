@@ -15,7 +15,10 @@ import '../model/cartabook.dart';
 import '../model/cartacard.dart';
 import '../model/cartaserver.dart';
 import '../model/cartalibrary.dart';
-import '../repo/firestore.dart';
+import '../repo/drive_api.dart';
+import '../repo/drive_repo.dart';
+import '../repo/local_shelf_cache.dart';
+import 'cartaauth.dart';
 import '../service/audiohandler.dart';
 import '../service/webpage.dart';
 import '../shared/helpers.dart';
@@ -31,7 +34,7 @@ const filterIcons = [
   Icons.cloud_rounded,
 ];
 
-class CartaBloc extends ChangeNotifier {
+class CartaBloc extends ChangeNotifier with WidgetsBindingObserver {
   int _sortIndex = 0;
   int _filterIndex = 0;
   late final SharedPreferences _prefs;
@@ -44,20 +47,32 @@ class CartaBloc extends ChangeNotifier {
   final _cancelRequests = <String>{};
   final _isDownloading = <String>{};
   // database
-  final _db = FirestoreRepo();
+  DriveRepo? _drive;
+  CartaAuth? _auth;
+  final LocalShelfCache _cache;
+  bool _hadGoogleSession = false;
+  DriveRepo? _loadingCacheFor;
+  DriveRepo? _syncingFor;
+  DriveRepo get _db => _drive!;
+  String? syncError;
   // book server data stored in the local database
   final List<CartaServer> _servers = <CartaServer>[];
   // libraries the user signed up
   final List<CartaLibrary> _libraries = <CartaLibrary>[];
 
-  CartaBloc(CartaAudioHandler handler) {
+  CartaBloc(CartaAudioHandler handler, {LocalShelfCache? cache})
+      : _cache = cache ??
+            LocalShelfCache(Directory('$appDocDirPath/drive_shelf_cache')) {
     _handler = handler;
+    WidgetsBinding.instance.addObserver(this);
     init();
   }
 
   @override
   dispose() {
     _subPlayState?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _drive?.close();
     _handler.dispose();
     super.dispose();
   }
@@ -69,19 +84,141 @@ class CartaBloc extends ChangeNotifier {
     _handlePlayStateChange();
   }
 
-  // set userId
-  Future<void> setUid(String? uid) async {
-    _db.uid = uid;
-    // valid user signed in
-    if (uid is String) {
-      await refreshBookServers();
-      await refreshBooks();
-      await refreshLibraries();
+  Future<void> setAccount(CartaAuth auth) async {
+    final id = auth.uid;
+    _auth = auth;
+    if (id == _drive?.uid) {
+      if (id != null &&
+          auth.hasGoogleSession &&
+          !_hadGoogleSession &&
+          _loadingCacheFor != _drive) {
+        _hadGoogleSession = true;
+        unawaited(syncNow());
+      } else {
+        _hadGoogleSession = auth.hasGoogleSession;
+      }
+      return;
+    }
+    _hadGoogleSession = auth.hasGoogleSession;
+    _drive?.close();
+    _drive = id == null
+        ? null
+        : DriveRepo(
+            DriveApi(
+              accessToken: auth.accessToken,
+              invalidateAccessToken: auth.invalidateAccessToken,
+            ),
+            id,
+          );
+    _books.clear();
+    _servers.clear();
+    _libraries.clear();
+    syncError = null;
+    final drive = _drive;
+    _loadingCacheFor = drive;
+    await Future<void>.delayed(Duration.zero);
+    notifyListeners();
+    if (drive != null) {
+      try {
+        final cached = await _cache.load(id!);
+        if (_drive != drive) return;
+        if (cached != null) {
+          for (final book in cached.books) {
+            await drive.restoreCachedBookCredentials(book);
+          }
+          for (final server in cached.servers) {
+            await drive.restoreCachedServerCredentials(server);
+          }
+          if (_drive != drive) return;
+          _books.addAll(cached.books);
+          _sortBooks();
+          _servers.addAll(cached.servers);
+          _libraries.addAll(cached.libraries);
+          notifyListeners();
+        }
+      } catch (error) {
+        syncError = 'Could not read saved bookshelf: $error';
+        notifyListeners();
+      } finally {
+        if (_loadingCacheFor == drive) {
+          _loadingCacheFor = null;
+          notifyListeners();
+        }
+      }
+      await syncNow();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _drive != null) {
+      syncNow();
+    }
+  }
+
+  Future<void> syncNow() async {
+    final drive = _drive;
+    if (drive == null || _loadingCacheFor == drive || _syncingFor == drive) {
+      return;
+    }
+    _syncingFor = drive;
+    notifyListeners();
+    try {
+      if (!await _auth!.ensureGoogleSession()) {
+        throw StateError(
+            'Google Drive is unavailable; showing saved bookshelf');
+      }
+      final servers = await drive.getBookServers();
+      final books = await drive.getAudioBooks();
+      final libraries = await drive.getOurLibraries();
+      if (_drive != drive) return;
+      _servers
+        ..clear()
+        ..addAll(servers);
+      _books
+        ..clear()
+        ..addAll(books);
+      _sortBooks();
+      _libraries
+        ..clear()
+        ..addAll(libraries);
+      syncError = null;
+      notifyListeners();
+      await _saveCache();
+    } catch (error) {
+      if (_drive != drive) return;
+      syncError = error.toString();
+      notifyListeners();
+    } finally {
+      if (_syncingFor == drive) {
+        _syncingFor = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _saveCache() async {
+    final drive = _drive;
+    if (drive == null) return;
+    try {
+      await _cache.save(
+          drive.uid,
+          CachedShelf(
+            List<CartaBook>.of(_books),
+            List<CartaServer>.of(_servers),
+            List<CartaLibrary>.of(_libraries),
+          ));
+    } catch (error) {
+      if (_drive != drive) return;
+      syncError = 'Could not save bookshelf for offline use: $error';
+      notifyListeners();
     }
   }
 
   // getters
-  String? get uid => _db.uid;
+  String? get uid => _drive?.uid;
+  bool get isLoadingShelf =>
+      _loadingCacheFor != null || (_syncingFor != null && _books.isEmpty);
   String get currentSort => sortOptions[_sortIndex];
   String get currentFilter => filterOptions[_filterIndex];
   IconData get sortIcon => sortIcons[_sortIndex];
@@ -213,10 +350,12 @@ class CartaBloc extends ChangeNotifier {
   //
   // Refresh list of books
   Future<void> refreshBooks() async {
+    final books = await _db.getAudioBooks();
     _books.clear();
-    _books.addAll(await _db.getAudioBooks());
+    _books.addAll(books);
     _sortBooks();
     notifyListeners();
+    await _saveCache();
   }
 
   // Create
@@ -232,6 +371,9 @@ class CartaBloc extends ChangeNotifier {
 
   // Read by Id
   Future<CartaBook?> getAudioBookByBookId(String bookId) async {
+    for (final book in _books) {
+      if (book.bookId == bookId) return book;
+    }
     return _db.getAudioBookByBookId(bookId);
   }
 
@@ -422,9 +564,11 @@ class CartaBloc extends ChangeNotifier {
 
   // Refresh server list
   Future refreshBookServers() async {
+    final servers = await _db.getBookServers();
     _servers.clear();
-    _servers.addAll(await _db.getBookServers());
+    _servers.addAll(servers);
     notifyListeners();
+    await _saveCache();
   }
 
   // Create
@@ -455,9 +599,11 @@ class CartaBloc extends ChangeNotifier {
 
   // Refresh list of libraries which I own or signed up
   Future refreshLibraries() async {
+    final libraries = await _db.getOurLibraries();
     _libraries.clear();
-    _libraries.addAll(await _db.getOurLibraries());
+    _libraries.addAll(libraries);
     notifyListeners();
+    await _saveCache();
   }
 
   // Create
@@ -465,7 +611,7 @@ class CartaBloc extends ChangeNotifier {
     // how many libraries owns already
     int count = 0;
     for (final library in _libraries) {
-      if (library.owner == _db.uid) {
+      if (library.owner == uid) {
         count = count + 1;
       }
     }
@@ -483,14 +629,6 @@ class CartaBloc extends ChangeNotifier {
     }
   }
 
-  // Update Data: caller has to
-  //  1. do the conversion of the field
-  //  2. update UI when successful
-  Future<bool> updateLibraryData(
-      String libraryId, Map<String, Object?> data) async {
-    return _db.updateLibraryData(libraryId, data);
-  }
-
   // Delete
   Future deleteLibrary(CartaLibrary library) async {
     if (await _db.deleteLibrary(library)) {
@@ -501,39 +639,19 @@ class CartaBloc extends ChangeNotifier {
   // Get my library from the list
   CartaLibrary? getMyLibrary() {
     // ASSUME that one can own only one library
-    final index = _libraries.indexWhere((l) => l.owner == _db.uid);
+    final index = _libraries.indexWhere((l) => l.owner == uid);
     return index == -1 ? null : _libraries[index];
   }
 
-  // Get all public libraries available
-  Future<List<CartaLibrary>> getPublicLibraries() async {
-    final libraries = await _db.getAllLibraries();
-    // exclude my libraries
-    libraries.removeWhere((l) => l.owner == _db.uid);
-    // mark signedUp if found in _libraries
-    // for (final library in libraries) {
-    //   library.signedUp = _libraries.any((l) => l.id == library.id);
-    // }
-    return libraries;
+  String libraryLink(CartaLibrary library) => _db.libraryLink(library);
+
+  Future<void> joinLibraryLink(String link) async {
+    await _db.joinLibrary(link);
+    await refreshLibraries();
   }
 
-  // Sign Up
-  Future signupLibrary(CartaLibrary library, {String? credential}) async {
-    if (library.id is String && _db.uid is String) {
-      if (await _db.updateLibraryData(
-          library.id!, {'members': library.members..add(_db.uid!)})) {
-        refreshLibraries();
-      }
-    }
-  }
-
-  // Cancel
-  Future cancelLibrary(CartaLibrary library, {String? credential}) async {
-    if (library.id is String && _db.uid is String) {
-      if (await _db.updateLibraryData(
-          library.id!, {'members': library.members..remove(_db.uid!)})) {
-        refreshLibraries();
-      }
-    }
+  Future<void> cancelLibrary(CartaLibrary library) async {
+    await _db.leaveLibrary(library);
+    await refreshLibraries();
   }
 }
