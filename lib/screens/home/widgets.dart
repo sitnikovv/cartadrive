@@ -219,22 +219,32 @@ class FirstLogin extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
-        children: filter == 'all'
+        children: logic.syncError != null && filter == 'all'
             ? [
-                const Text('Welcome to $appName', style: textStyle),
+                const Icon(Icons.cloud_off_outlined, size: 80),
                 const SizedBox(height: 16.0),
-                const SizedBox(
-                  width: 80,
-                  child: Image(image: AssetImage(defaultAlbumImage)),
-                ),
-                const SizedBox(height: 16.0),
-                const Text('Add books and start listening', style: textStyle),
+                const Text('Books are not saved on this device yet',
+                    style: textStyle),
+                const SizedBox(height: 8.0),
+                const Text('Connect to Drive once, then retry in Settings'),
               ]
-            : [
-                Icon(logic.filterIcon, size: 80, color: Colors.blueGrey),
-                const SizedBox(height: 16.0),
-                Text('Add $filter books', style: textStyle),
-              ],
+            : filter == 'all'
+                ? [
+                    const Text('Welcome to $appName', style: textStyle),
+                    const SizedBox(height: 16.0),
+                    const SizedBox(
+                      width: 80,
+                      child: Image(image: AssetImage(defaultAlbumImage)),
+                    ),
+                    const SizedBox(height: 16.0),
+                    const Text('Add books and start listening',
+                        style: textStyle),
+                  ]
+                : [
+                    Icon(logic.filterIcon, size: 80, color: Colors.blueGrey),
+                    const SizedBox(height: 16.0),
+                    Text('Add $filter books', style: textStyle),
+                  ],
       ),
     );
   }

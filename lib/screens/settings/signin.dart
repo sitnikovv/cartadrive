@@ -13,6 +13,8 @@ class SignInPage extends StatefulWidget {
 }
 
 class _SignInPageState extends State<SignInPage> {
+  bool _signingIn = false;
+
   //
   // Google Sign In
   //
@@ -20,17 +22,21 @@ class _SignInPageState extends State<SignInPage> {
     return ElevatedButton.icon(
       icon: Icon(FlutterIcons.google,
           color: Theme.of(context).colorScheme.tertiary),
-      onPressed: () async {
-        final result = await auth.signInWithGoogle();
-        if (mounted && result == null) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-              'Failed to sign in (${auth.lastError})',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ));
-        }
-      },
+      onPressed: _signingIn
+          ? null
+          : () async {
+              setState(() => _signingIn = true);
+              final result = await auth.signInWithGoogle();
+              if (mounted) setState(() => _signingIn = false);
+              if (mounted && result == null && auth.lastError.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(
+                    'Failed to sign in (${auth.lastError})',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ));
+              }
+            },
       label: const Text('Sign In with Google'),
     );
   }

@@ -300,12 +300,15 @@ class _HomePageState extends State<HomePage> {
   // Scaffold.Body
   //
   Widget _buildBody() {
-    final books = context.watch<CartaBloc>().books;
+    final logic = context.watch<CartaBloc>();
+    final books = logic.books;
     final screen = context.watch<ScreenConfig>();
     // logDebug('home.body screen.layout: ${screen.layout}');
     // logDebug('home.body isWide: ${screen.isWide}');
     if (books.isEmpty) {
-      // no books
+      if (logic.isLoadingShelf) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return const FirstLogin();
     } else if (isScreenWide) {
       // wide screen

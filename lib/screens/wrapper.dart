@@ -10,8 +10,8 @@ class Wrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<CartaAuth>().user;
+    final signedIn = context.watch<CartaAuth>().hasSavedAccount;
 
-    return user != null ? const HomePage() : const SignInPage();
+    return signedIn ? const HomePage() : const SignInPage();
   }
 }
