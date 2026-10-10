@@ -57,6 +57,13 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
+      - name: Use nightly icon
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp "android/nightly-icons/mipmap-$density/ic_launcher.png" \
+              "android/app/src/main/res/mipmap-$density/ic_launcher.png"
+          done
       - name: Prepare Android signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
