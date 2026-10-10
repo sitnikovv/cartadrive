@@ -1,0 +1,110 @@
+name: Android release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+          cache: true
+      - name: Check release configuration
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_STORE_PASSWORD GOOGLE_WEB_CLIENT_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name is not configured"
+              exit 1
+            fi
+          done
+      - name: Read app version
+        id: version
+        run: |
+          version=$(sed -n 's/^version: //p' pubspec.yaml)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
+            echo '::error::Invalid version in pubspec.yaml'
+            exit 1
+          fi
+          if ! grep -Fqx "const appVersion = '$version';" lib/shared/settings.dart; then
+            echo '::error::App versions in pubspec.yaml and settings.dart differ'
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
+      - name: Prepare Android signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEYSTORE_PATH: ${{ runner.temp }}/cartadrive-release.jks
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def property_value(value):
+              for character, escaped in [
+                  ('\\', '\\\\'), ('\n', '\\n'), ('\r', '\\r'),
+                  ('\t', '\\t'), ('\f', '\\f'), (' ', '\\ '),
+                  ('=', '\\='), (':', '\\:'), ('#', '\\#'), ('!', '\\!'),
+              ]:
+                  value = value.replace(character, escaped)
+              return value
+
+          properties = {
+              'keyAlias': os.environ['ANDROID_KEY_ALIAS'],
+              'keyPassword': os.environ['ANDROID_KEY_PASSWORD'],
+              'storeFile': os.environ['KEYSTORE_PATH'],
+              'storePassword': os.environ['ANDROID_STORE_PASSWORD'],
+          }
+          Path('android/key.properties').write_text(
+              ''.join(f'{key}={property_value(value)}\n'
+                      for key, value in properties.items()),
+              encoding='utf-8',
+          )
+          PY
+      - name: Build signed APK
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+        run: flutter build apk --release --dart-define=GOOGLE_WEB_CLIENT_ID="$GOOGLE_WEB_CLIENT_ID"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          existing_tag=$(git ls-remote --tags origin "refs/tags/$TAG")
+          if [[ -n "$existing_tag" ]]; then
+            echo "::error::Tag $TAG already exists; increase the app version before releasing"
+            exit 1
+          fi
+          apk="$RUNNER_TEMP/CartaDrive-$TAG.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          gh release create "$TAG" "$apk" \
+            --target "$GITHUB_SHA" \
+            --title "Carta Drive $VERSION" \
+            --notes "Android APK for Carta Drive $VERSION."
