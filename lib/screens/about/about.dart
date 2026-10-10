@@ -61,7 +61,7 @@ class _AboutPageState extends State<AboutPage> {
                 builder: (context) {
                   return SimpleDialog(
                     title: Center(
-                      child: Text('Visit Our Store', style: titleStyle),
+                      child: Text('Carta Drive repository', style: titleStyle),
                     ),
                     children: [
                       Padding(
@@ -74,9 +74,9 @@ class _AboutPageState extends State<AboutPage> {
               );
             },
           ),
-          // About
+          // Original project
           ListTile(
-            title: Text('About Us', style: titleStyle),
+            title: Text('Original project', style: titleStyle),
             subtitle: const Text(urlHomePage),
             onTap: () => launchUrl(Uri.parse(urlHomePage),
                 mode: LaunchMode.externalApplication),
@@ -93,23 +93,6 @@ class _AboutPageState extends State<AboutPage> {
             title: Text('Background Image', style: titleStyle),
             subtitle: const Text("Photo by Florencia Viadana at unsplash.com"),
             onTap: () => launchUrl(Uri.parse(urlStoreImageSource),
-                mode: LaunchMode.externalApplication),
-          ),
-          // Disclaimer
-          ListTile(
-            title: Text('Disclaimer', style: titleStyle),
-            subtitle: const Text('We assumes no responsibility for errors '
-                'in the contents of the Service. (tap to see the full text).'),
-            onTap: () => launchUrl(Uri.parse(urlDisclaimer),
-                mode: LaunchMode.externalApplication),
-          ),
-          // Privacy
-          ListTile(
-            title: Text('Privacy Policy', style: titleStyle),
-            subtitle: const Text('We only collect data essential for the '
-                'service and do not share it with any third parties '
-                '(tap to see the full text).'),
-            onTap: () => launchUrl(Uri.parse(urlPrivacyPolicy),
                 mode: LaunchMode.externalApplication),
           ),
         ],

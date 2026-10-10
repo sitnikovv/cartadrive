@@ -86,7 +86,7 @@ class MyApp extends StatelessWidget {
     return DynamicColorBuilder(
         builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
       return MaterialApp(
-        title: "Carta",
+        title: appName,
         initialRoute: '/',
         onGenerateRoute: (settings) {
           if (settings.name != null) {
