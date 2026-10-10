@@ -1,23 +1,23 @@
 // app info
 import 'package:flutter/material.dart';
 
-const appId = 'com.innomatic.cartaplus';
-const appName = 'Carta Plus';
+const appId = 'info.sitnikov.cartadrive';
+const appName = 'Carta Drive';
 const appVersion = '2.6.2+37';
 const emailDeveloper = 'nuntium.ubique@gmail.com';
-const androidNotificationChannelId = 'com.innomatic.cartaplus.channel.audio';
+const androidNotificationChannelId = 'info.sitnikov.cartadrive.channel.audio';
 const androidNotificationChannelName = 'Carta playback';
 
 // asset images
 const defaultAlbumImage = 'assets/images/open-book-512.png';
 const defaultLibriVoxImage = 'assets/images/book-cover-150x150.gif';
 const bookPanelBgndImage = 'assets/images/house_of_books.jpg';
-const sourceRepoUrlQrCode = 'assets/images/com.innomatic.cartaplus.png';
+const sourceRepoUrlQrCode = 'assets/images/cartadrive-repo.png';
 
 // urls
 const urlHomePage = 'https://www.innomatic.ca';
-const urlSourceRepo = 'https://github.com/innomatica/cartaplus';
-const urlAppRelease = 'https://github.com/innomatica/cartaplus/releases';
+const urlSourceRepo = 'https://github.com/sitnikovv/cartadrive';
+const urlAppRelease = 'https://github.com/sitnikovv/cartadrive/releases';
 const urlPrivacyPolicy = 'https://innomatica.github.io/cartaplus/privacy/';
 const urlDisclaimer = 'https://innomatica.github.io/cartaplus/disclaimer/';
 const urlInstruction = 'https://innomatica.github.io/cartaplus/manual/';
@@ -25,8 +25,8 @@ const urlAppIconSource = 'https://www.flaticon.com/free-icon/open-book_1940795';
 const urlStoreImageSource = 'https://unsplash.com/@florenciaviadana';
 
 // github
-const githubUser = 'innomatica';
-const githubRepo = 'cartaplus';
+const githubUser = 'sitnikovv';
+const githubRepo = 'cartadrive';
 
 // selected books
 const urlSelectedBooksJson =
