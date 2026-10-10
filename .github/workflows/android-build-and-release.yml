@@ -1,16 +1,20 @@
-name: Android release
+name: Android build and release
 
 on:
   push:
     branches:
+      - develop
       - master
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -91,11 +95,32 @@ jobs:
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
         run: flutter build apk --release --dart-define=GOOGLE_WEB_CLIENT_ID="$GOOGLE_WEB_CLIENT_ID"
+      - name: Save APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CartaDrive-${{ github.ref_name }}-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  release:
+    if: github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: CartaDrive-${{ github.ref_name }}-${{ github.sha }}
+          path: ${{ runner.temp }}/apk
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           existing_tag=$(git ls-remote --tags origin "refs/tags/$TAG")
           if [[ -n "$existing_tag" ]]; then
@@ -103,7 +128,7 @@ jobs:
             exit 1
           fi
           apk="$RUNNER_TEMP/CartaDrive-$TAG.apk"
-          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          cp "$RUNNER_TEMP/apk/app-release.apk" "$apk"
           gh release create "$TAG" "$apk" \
             --target "$GITHUB_SHA" \
             --title "Carta Drive $VERSION" \
